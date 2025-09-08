@@ -50,8 +50,15 @@ jobs:
           mkdir -p build/${{ matrix.goarch }}
           go build -v -o build/${{ matrix.goarch }}/bot .
 
+      - name: Prepare files for artifact
+        run: |
+          mkdir -p artifact
+          cp build/${{ matrix.goarch }}/bot artifact/
+          cp bot.ini artifact/
+          cp docs/bot.sh artifact/
+      
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: bot-${{ matrix.goarch }}
-          path: build/${{ matrix.goarch }}/bot
+          path: artifact/*
