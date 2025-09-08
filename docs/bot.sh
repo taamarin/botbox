@@ -72,7 +72,7 @@ restart_bot() {
 case $1 in
     start|r) start_bot ;;
     stop|k) stop_bot ;;
-    restart|r) restart_bot ;;
+    restart|l) restart_bot ;;
     status|s) status_bot ;;
     help)
         echo "Available commands:"
