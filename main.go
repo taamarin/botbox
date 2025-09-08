@@ -17,10 +17,10 @@ import (
 )
 
 var (
-	botToken   string
-	ownerID    int64
-	mihomoAPI  string
-	apiSecret  string
+	botToken	 string
+	ownerID		int64
+	mihomoAPI	string
+	apiSecret	string
 )
 
 // Jalankan command shell
@@ -176,20 +176,26 @@ func main() {
 
 	log.Printf("Bot jalan sebagai %s", bot.Self.UserName)
 
-  // Ambil update terakhir dulu supaya mengabaikan pesan lama
-  u := tgbotapi.NewUpdate(0)
-  u.Timeout = 30
-  
-  updates, _ := bot.GetUpdates(u)
-  if len(updates) > 0 {
-      lastUpdate := updates[len(updates)-1]
-      u.Offset = lastUpdate.UpdateID + 1
-  }
-  
-  // Mulai channel update
-  updatesChan := bot.GetUpdatesChan(u)
 
-  for update := range updatesChan {
+	// Kirim notifikasi ke owner
+	startupMsg := tgbotapi.NewMessage(ownerID, fmt.Sprintf("✅ Bot *%s* berhasil dijalankan! /help", bot.Self.UserName))
+	startupMsg.ParseMode = "Markdown"
+	bot.Send(startupMsg)
+	
+	// Ambil update terakhir dulu supaya mengabaikan pesan lama
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 30
+	
+	updates, _ := bot.GetUpdates(u)
+	if len(updates) > 0 {
+			lastUpdate := updates[len(updates)-1]
+			u.Offset = lastUpdate.UpdateID + 1
+	}
+	
+	// Mulai channel update
+	updatesChan := bot.GetUpdatesChan(u)
+
+	for update := range updatesChan {
 		// --- Handle pesan ---
 		if update.Message != nil && update.Message.Text != "" {
 			// cek akses
@@ -211,39 +217,48 @@ func main() {
 				bot.Send(msg)
 
 			case "/import":
+				// default folder
+				defaultPath := "/data/adb/box"
+				
+				// target path: argumen pertama kalau ada
+				targetPath := defaultPath
+				if len(args) > 1 {
+					targetPath = args[1]
+				}
+		
 				if update.Message.ReplyToMessage != nil && update.Message.ReplyToMessage.Document != nil {
 					doc := update.Message.ReplyToMessage.Document
 					file, err := bot.GetFile(tgbotapi.FileConfig{FileID: doc.FileID})
 					if err != nil {
-						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Gagal ambil file: "+err.Error()))
+						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Failed to get file: "+err.Error()))
 						break
 					}
-
+	
 					downloadURL := file.Link(bot.Token)
 					resp, err := http.Get(downloadURL)
 					if err != nil {
-						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Gagal download file: "+err.Error()))
+						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Failed to download file: "+err.Error()))
 						break
 					}
 					defer resp.Body.Close()
-
-					savePath := filepath.Join("/data/adb/box", doc.FileName)
+	
+					savePath := filepath.Join(targetPath, doc.FileName)
 					out, err := os.Create(savePath)
 					if err != nil {
-						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Gagal buat file: "+err.Error()))
+						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Failed to create file: "+err.Error()))
 						break
 					}
 					defer out.Close()
-
+	
 					_, err = io.Copy(out, resp.Body)
 					if err != nil {
-						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Gagal simpan file: "+err.Error()))
+						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Failed to save file: "+err.Error()))
 						break
 					}
-
-					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "✅ File disimpan ke "+savePath))
-				} else {
-					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Gunakan `/import` dengan reply file."))
+	
+					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "✅ File saved to "+savePath))
+			} else {
+				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Use `/import <path>` with reply to a file."))
 				}
 
 			case "/export":
