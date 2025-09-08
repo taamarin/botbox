@@ -54,7 +54,7 @@ jobs:
         run: |
           mkdir -p artifact
           cp build/${{ matrix.goarch }}/bot artifact/
-          cp bot.ini artifact/
+          cp docs/bot.ini artifact/
           cp docs/bot.sh artifact/
       
       - name: Upload artifact

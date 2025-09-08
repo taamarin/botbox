@@ -176,11 +176,20 @@ func main() {
 
 	log.Printf("Bot jalan sebagai %s", bot.Self.UserName)
 
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-	updates := bot.GetUpdatesChan(u)
+  // Ambil update terakhir dulu supaya mengabaikan pesan lama
+  u := tgbotapi.NewUpdate(0)
+  u.Timeout = 30
+  
+  updates, _ := bot.GetUpdates(u)
+  if len(updates) > 0 {
+      lastUpdate := updates[len(updates)-1]
+      u.Offset = lastUpdate.UpdateID + 1
+  }
+  
+  // Mulai channel update
+  updatesChan := bot.GetUpdatesChan(u)
 
-	for update := range updates {
+  for update := range updatesChan {
 		// --- Handle pesan ---
 		if update.Message != nil && update.Message.Text != "" {
 			// cek akses
