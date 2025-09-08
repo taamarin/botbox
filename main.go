@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -139,13 +140,29 @@ func coreMenu() tgbotapi.InlineKeyboardMarkup {
 	)
 }
 
+var configPath string
+
 func main() {
-	// Baca config dari bot.ini
-	cfg, err := ini.Load("bot.ini")
-	if err != nil {
-		log.Fatalf("Gagal baca bot.ini: %v", err)
+	// baca path dari argumen -c
+	flag.StringVar(&configPath, "c", "", "Path ke bot.ini")
+	flag.Parse()
+
+	if configPath == "" {
+		// default: folder binary
+		exPath, err := os.Executable()
+		if err != nil {
+			log.Fatalf("Gagal dapat path executable: %v", err)
+		}
+		exDir := filepath.Dir(exPath)
+		configPath = filepath.Join(exDir, "bot.ini")
 	}
-	botToken = cfg.Section("bot").Key("token").String()
+
+	cfg, err := ini.Load(configPath)
+	if err != nil {
+		log.Fatalf("Gagal baca bot.ini di %s: %v", configPath, err)
+	}
+
+	botToken := cfg.Section("bot").Key("token").String()
 	ownerStr := cfg.Section("bot").Key("owner").String()
 	ownerID, _ = strconv.ParseInt(ownerStr, 10, 64)
 
