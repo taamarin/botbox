@@ -269,6 +269,10 @@ func main() {
 			HandleBasicCommands(bot, update.Message.Chat.ID, update.Message.Text)
 
 			switch args[0] {
+			case "/ipinfo":
+				handleIPInfo(bot, update)
+			case "/hostip":
+				handleHostIP(bot, update)
 			case "/yacd":
 				handleYacd(bot, update.Message.Chat.ID)
 			case "/speedtest":
