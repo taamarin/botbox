@@ -1,4 +1,4 @@
-package main
+package module
 
 import (
 	"strings"
@@ -39,7 +39,7 @@ func HandleHelp(chatID int64, bot *tgbotapi.BotAPI) {
 func HandleMenu(chatID int64, bot *tgbotapi.BotAPI) {
 	msg := tgbotapi.NewMessage(chatID, "📌 *Menu Utama:*")
 	msg.ParseMode = "Markdown"
-	msg.ReplyMarkup = mainMenu()
+	msg.ReplyMarkup = MainMenu()
 	bot.Send(msg)
 }
 

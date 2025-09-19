@@ -7,13 +7,12 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"main/module"
 	"gopkg.in/ini.v1"
-	"github.com/showwin/speedtest-go/speedtest"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
@@ -23,183 +22,6 @@ var (
 	mihomoAPI	string
 	apiSecret	string
 )
-
-// Jalankan command shell
-func runCommand(cmd string, args ...string) string {
-	out, err := exec.Command(cmd, args...).CombinedOutput()
-	if err != nil {
-		return fmt.Sprintf("Error: %v\nOutput: %s", err, string(out))
-	}
-	return string(out)
-}
-
-// Menu utama
-func mainMenu() tgbotapi.InlineKeyboardMarkup {
-	return tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("▶️ Start", "start"),
-			tgbotapi.NewInlineKeyboardButtonData("⏹ Stop", "stop"),
-			tgbotapi.NewInlineKeyboardButtonData("🔄 Restart", "r"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("⚡ Service", "submenu_service"),
-			tgbotapi.NewInlineKeyboardButtonData("🛡 Iptables", "submenu_iptables"),
-			tgbotapi.NewInlineKeyboardButtonData("🛠 Tools", "submenu_tools"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("⬆️ Upgrade Core", "u"),
-			tgbotapi.NewInlineKeyboardButtonData("⬆️ Upgrade UI", "x"),
-		),
-	)
-}
-
-// Submenu Service
-func serviceMenu() tgbotapi.InlineKeyboardMarkup {
-	return tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("▶️ Start", "s start"),
-			tgbotapi.NewInlineKeyboardButtonData("⏹ Stop", "s stop"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🔄 Restart", "s restart"),
-			tgbotapi.NewInlineKeyboardButtonData("📊 Status", "s status"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("⏰ Cron", "s cron"),
-			tgbotapi.NewInlineKeyboardButtonData("🛑 Kill Cron", "s kcron"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("⬅️ Kembali", "mainmenu"),
-		),
-	)
-}
-
-// Submenu Iptables
-func iptablesMenu() tgbotapi.InlineKeyboardMarkup {
-	return tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("✅ Enable", "i enable"),
-			tgbotapi.NewInlineKeyboardButtonData("❌ Disable", "i disable"),
-			tgbotapi.NewInlineKeyboardButtonData("🔄 Renew", "i renew"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("⬅️ Kembali", "mainmenu"),
-		),
-	)
-}
-
-// Submenu Tools
-func toolsMenu() tgbotapi.InlineKeyboardMarkup {
-	return tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🔍 Check", "t check"),
-			tgbotapi.NewInlineKeyboardButtonData("🧠 Memcg", "t memcg"),
-			tgbotapi.NewInlineKeyboardButtonData("⚙️ Cpuset", "t cpuset"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("💽 Blkio", "t blkio"),
-			tgbotapi.NewInlineKeyboardButtonData("🔗 Bond0", "t bond0"),
-			tgbotapi.NewInlineKeyboardButtonData("🔗 Bond1", "t bond1"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🌍 GeoSub", "t geosub"),
-			tgbotapi.NewInlineKeyboardButtonData("🌐 GeoX", "t geox"),
-			tgbotapi.NewInlineKeyboardButtonData("📦 Subs", "t subs"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("⬆️ UpKernel", "t upkernel"),
-			tgbotapi.NewInlineKeyboardButtonData("⬆️ UpXUI", "t upxui"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("⬆️ UpYQ", "t upyq"),
-			tgbotapi.NewInlineKeyboardButtonData("⬆️ UpCurl", "t upcurl"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("♻️ Reload", "t reload"),
-			tgbotapi.NewInlineKeyboardButtonData("🌐 Webroot", "t webroot"),
-			tgbotapi.NewInlineKeyboardButtonData("🚀 All", "t all"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("⬅️ Kembali", "mainmenu"),
-		),
-	)
-}
-
-func coreMenu() tgbotapi.InlineKeyboardMarkup {
-	return tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("clash", "core_clash"),
-			tgbotapi.NewInlineKeyboardButtonData("sing-box", "core_sing-box"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("xray", "core_xray"),
-			tgbotapi.NewInlineKeyboardButtonData("v2fly", "core_v2fly"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("hysteria", "core_hysteria"),
-		),
-	)
-}
-
-func HandleSpeedTest(chatID int64, bot *tgbotapi.BotAPI) {
-	msg := tgbotapi.NewMessage(chatID, "⏳ Running speed test, please wait...")
-	sentMsg, _ := bot.Send(msg)
-
-	// Fetch user info untuk ISP
-	user, err := speedtest.FetchUserInfo()
-	if err != nil {
-		bot.Send(tgbotapi.NewMessage(chatID, "❌ Failed to fetch user info: "+err.Error()))
-		return
-	}
-
-	// Fetch servers
-	serverList, err := speedtest.FetchServers()
-	if err != nil {
-		bot.Send(tgbotapi.NewMessage(chatID, "❌ Failed to fetch servers: "+err.Error()))
-		return
-	}
-
-	targets, err := serverList.FindServer([]int{})
-	if err != nil || len(targets) == 0 {
-		bot.Send(tgbotapi.NewMessage(chatID, "❌ No server found"))
-		return
-	}
-
-	// Ambil server pertama
-	srv := targets[0]
-
-	// Run speed test
-	if err := srv.PingTest(nil); err != nil {
-		bot.Send(tgbotapi.NewMessage(chatID, "❌ PingTest failed: "+err.Error()))
-		return
-	}
-	if err := srv.DownloadTest(); err != nil {
-		bot.Send(tgbotapi.NewMessage(chatID, "❌ DownloadTest failed: "+err.Error()))
-		return
-	}
-	if err := srv.UploadTest(); err != nil {
-		bot.Send(tgbotapi.NewMessage(chatID, "❌ UploadTest failed: "+err.Error()))
-		return
-	}
-
-	// Format hasil
-	result := fmt.Sprintf(
-		"📊 Speed Test Result:\nISP: %s\nServer: %s (%s)\nPing: %.2f ms\nDownload: %.2f Mbps\nUpload: %.2f Mbps",
-		user.Isp,
-		srv.Name,
-		srv.Host,
-		srv.Latency.Seconds()*1000,
-		(srv.DLSpeed/1024/1024)*8,
-		(srv.ULSpeed/1024/1024)*8,
-	)
-
-	// Reset context
-	srv.Context.Reset()
-
-	// Update pesan dengan hasil
-	edit := tgbotapi.NewEditMessageText(chatID, sentMsg.MessageID, result)
-	bot.Send(edit)
-}
 
 var configPath string
 
@@ -230,13 +52,15 @@ func main() {
 	mihomoAPI = cfg.Section("mihomo").Key("api").String()
 	apiSecret = cfg.Section("mihomo").Key("secret").String()
 
+	// inisialisasi modul yacd
+	module.Init(mihomoAPI, apiSecret)
+
 	bot, err := tgbotapi.NewBotAPI(botToken)
 	if err != nil {
 		log.Panic(err)
 	}
 
 	log.Printf("Bot jalan sebagai %s", bot.Self.UserName)
-
 
 	// Kirim notifikasi ke owner
 	startupMsg := tgbotapi.NewMessage(ownerID, fmt.Sprintf("✅ Bot *%s* berhasil dijalankan! /help", bot.Self.UserName))
@@ -266,20 +90,20 @@ func main() {
 			}
 
 			args := strings.Fields(update.Message.Text)
-			HandleBasicCommands(bot, update.Message.Chat.ID, update.Message.Text)
+			module.HandleBasicCommands(bot, update.Message.Chat.ID, update.Message.Text)
 
 			switch args[0] {
 			case "/ipinfo":
-				handleIPInfo(bot, update)
+				module.HandleIPInfo(bot, update)
 			case "/hostip":
-				handleHostIP(bot, update)
+				module.HandleHostIP(bot, update)
 			case "/yacd":
-				handleYacd(bot, update.Message.Chat.ID)
+				module.HandleYacd(bot, update.Message.Chat.ID)
 			case "/speedtest":
-				HandleSpeedTest(update.Message.Chat.ID, bot)
+				module.HandleSpeedTest(update.Message.Chat.ID, bot)
 			case "/core":
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Pilih core yang ingin digunakan:")
-				msg.ReplyMarkup = coreMenu()
+				msg.ReplyMarkup = module.CoreMenu()
 				bot.Send(msg)
 
 			case "/import":
@@ -356,9 +180,9 @@ func main() {
 				}
 
 			case "/sbfr":
-				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Pilih aksi untuk `/system/bin/sbfr`:")
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Pilih aksi untuk `/data/adb/modules/box_for_root/system/bin/sbfr`:")
 				msg.ParseMode = "Markdown"
-				msg.ReplyMarkup = mainMenu()
+				msg.ReplyMarkup = module.MainMenu()
 				bot.Send(msg)
 			}
 		}
@@ -377,7 +201,7 @@ func main() {
 			if strings.HasPrefix(data, "core_") {
 				selecCore := strings.TrimPrefix(data, "core_")
 				cmd := fmt.Sprintf("sed -i 's/bin_name=.*/bin_name=%s/g' /data/adb/box/settings.ini", selecCore)
-				output := runCommand("sh", "-c", cmd)
+				output := module.RunCommand("sh", "-c", cmd)
 			
 				resultText := strings.TrimSpace(output)
 				if resultText == "" {
@@ -411,29 +235,29 @@ func main() {
 				data == "upgrade" ||
 				data == "version" ||
 				data == "back" {
-				handleYacdCallback(bot, update.CallbackQuery)
+				module.HandleYacdCallback(bot, update.CallbackQuery)
 				continue
 			}
 
 			// sbfr callback
 			switch data {
 			case "submenu_service":
-				edit := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, "⚡ *Service Commands*", serviceMenu())
+				edit := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, "⚡ *Service Commands*", module.ServiceMenu())
 				edit.ParseMode = "Markdown"
 				bot.Send(edit)
 
 			case "submenu_iptables":
-				edit := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, "🛡 *Iptables Commands*", iptablesMenu())
+				edit := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, "🛡 *Iptables Commands*", module.IptablesMenu())
 				edit.ParseMode = "Markdown"
 				bot.Send(edit)
 
 			case "submenu_tools":
-				edit := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, "🛠 *Tools Commands*", toolsMenu())
+				edit := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, "🛠 *Tools Commands*", module.ToolsMenu())
 				edit.ParseMode = "Markdown"
 				bot.Send(edit)
 
 			case "mainmenu":
-				edit := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, "Pilih aksi untuk `/system/bin/sbfr`:", mainMenu())
+				edit := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, "Pilih aksi untuk `/data/adb/modules/box_for_root/system/bin/sbfr`:", module.MainMenu())
 				edit.ParseMode = "Markdown"
 				bot.Send(edit)
 
@@ -445,9 +269,9 @@ func main() {
 				var output string
 				parts := strings.Fields(data)
 				if len(parts) == 1 {
-					output = runCommand("/system/bin/sbfr", parts[0])
+					output = module.RunCommand("/data/adb/modules/box_for_root/system/bin/sbfr", parts[0])
 				} else if len(parts) == 2 {
-					output = runCommand("/system/bin/sbfr", parts[0], parts[1])
+					output = module.RunCommand("/data/adb/modules/box_for_root/system/bin/sbfr", parts[0], parts[1])
 				}
 
 				// tombol kembali

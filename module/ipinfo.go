@@ -1,4 +1,4 @@
-package main
+package module
 
 import (
 	"fmt"
@@ -80,7 +80,7 @@ func fetchIPInfo(ip string) (string, error) {
 }
 
 // Handler untuk /ipinfo
-func handleIPInfo(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+func HandleIPInfo(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	var domainText string
 
 	if update.Message.CommandArguments() != "" {

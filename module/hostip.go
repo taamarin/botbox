@@ -1,4 +1,4 @@
-package main
+package module
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 )
 
 // Handler untuk /hostip
-func handleHostIP(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+func HandleHostIP(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	var domainText string
 
 	// Ambil dari argumen /hostip <domain>

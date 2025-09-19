@@ -1,4 +1,4 @@
-package main
+package module
 
 import (
 	"bytes"
@@ -12,10 +12,15 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// const (
-	// MIHOMO_API = "http://192.168.1.1:9090"
-	// API_SECRET = "123456"
-// )
+var (
+	mihomoAPI string
+	apiSecret string
+)
+
+func Init(api, secret string) {
+	mihomoAPI = api
+	apiSecret = secret
+}
 
 var HEADERS = map[string]string{
 	"Authorization": "Bearer " + apiSecret,
@@ -93,7 +98,7 @@ func yacdMenu(proxies map[string]ProxyItem) tgbotapi.InlineKeyboardMarkup {
 }
 
 // handler command /yacd
-func handleYacd(bot *tgbotapi.BotAPI, chatID int64) {
+func HandleYacd(bot *tgbotapi.BotAPI, chatID int64) {
 	var proxiesResp ProxiesResponse
 	err := getJSON(mihomoAPI+"/proxies", &proxiesResp)
 	if err != nil {
@@ -107,7 +112,7 @@ func handleYacd(bot *tgbotapi.BotAPI, chatID int64) {
 }
 
 // handler callback dashboard
-func handleYacdCallback(bot *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
+func HandleYacdCallback(bot *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
 	data := cq.Data
 	chatID := cq.Message.Chat.ID
 	msgID := cq.Message.MessageID
