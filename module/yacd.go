@@ -91,6 +91,7 @@ func yacdMenu(proxies map[string]ProxyItem) tgbotapi.InlineKeyboardMarkup {
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("Upgrade", "upgrade"),
 			tgbotapi.NewInlineKeyboardButtonData("Versi", "version"),
+			tgbotapi.NewInlineKeyboardButtonData("Traffic", "traffic"), // 👈 tambahan
 		),
 	)
 
@@ -246,6 +247,37 @@ func HandleYacdCallback(bot *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
 		var v map[string]string
 		getJSON(mihomoAPI+"/version", &v)
 		bot.Send(tgbotapi.NewEditMessageText(chatID, msgID, "`"+v["version"]+"`"))
+
+	case data == "traffic":
+		var conns map[string]interface{}
+		if err := getJSON(mihomoAPI+"/connections", &conns); err != nil {
+			bot.Send(tgbotapi.NewEditMessageText(chatID, msgID, "❌ Gagal ambil status: "+err.Error()))
+			return
+		}
+		
+		total := 0
+		if connections, ok := conns["connections"].([]interface{}); ok {
+			total = len(connections)
+		}
+		
+		// Get download/upload stats
+		download := 0.0
+		upload := 0.0
+		if traffic, ok := conns["downloadTotal"].(float64); ok {
+			download = traffic / 1024 / 1024 // Convert to MB
+		}
+		if traffic, ok := conns["uploadTotal"].(float64); ok {
+			upload = traffic / 1024 / 1024 // Convert to MB
+		}
+
+		statusText := fmt.Sprintf("📊 *Status Koneksi:*\n"+
+			"• Koneksi aktif: %d\n"+
+			"• Download: %.2f MB\n"+
+			"• Upload: %.2f MB", total, download, upload)
+		
+		edit := tgbotapi.NewEditMessageText(chatID, msgID, statusText)
+		edit.ParseMode = "Markdown"
+		bot.Send(edit)
 
 	case data == "back":
 		var proxiesResp ProxiesResponse

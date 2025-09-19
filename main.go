@@ -93,6 +93,10 @@ func main() {
 			module.HandleBasicCommands(bot, update.Message.Chat.ID, update.Message.Text)
 
 			switch args[0] {
+			case "/myip":
+				module.HandleMyIP(bot, update.Message.Chat.ID)
+			case "/info":
+				module.HandleInfo(bot, update.Message.Chat.ID)
 			case "/ipinfo":
 				module.HandleIPInfo(bot, update)
 			case "/hostip":
@@ -234,6 +238,7 @@ func main() {
 				data == "restart" ||
 				data == "upgrade" ||
 				data == "version" ||
+				data == "traffic" ||
 				data == "back" {
 				module.HandleYacdCallback(bot, update.CallbackQuery)
 				continue
