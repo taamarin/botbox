@@ -17,10 +17,10 @@ import (
 )
 
 var (
-	botToken	 string
-	ownerID		int64
-	mihomoAPI	string
-	apiSecret	string
+	botToken  string
+	ownerID   int64
+	mihomoAPI string
+	apiSecret string
 )
 
 var configPath string
@@ -66,17 +66,17 @@ func main() {
 	startupMsg := tgbotapi.NewMessage(ownerID, fmt.Sprintf("✅ Bot *%s* berhasil dijalankan! /help", bot.Self.UserName))
 	startupMsg.ParseMode = "Markdown"
 	bot.Send(startupMsg)
-	
+
 	// Ambil update terakhir dulu supaya mengabaikan pesan lama
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 30
-	
+
 	updates, _ := bot.GetUpdates(u)
 	if len(updates) > 0 {
-			lastUpdate := updates[len(updates)-1]
-			u.Offset = lastUpdate.UpdateID + 1
+		lastUpdate := updates[len(updates)-1]
+		u.Offset = lastUpdate.UpdateID + 1
 	}
-	
+
 	// Mulai channel update
 	updatesChan := bot.GetUpdatesChan(u)
 
@@ -113,13 +113,13 @@ func main() {
 			case "/import":
 				// default folder
 				defaultPath := "/data/adb/box"
-				
+
 				// target path: argumen pertama kalau ada
 				targetPath := defaultPath
 				if len(args) > 1 {
 					targetPath = args[1]
 				}
-		
+
 				if update.Message.ReplyToMessage != nil && update.Message.ReplyToMessage.Document != nil {
 					doc := update.Message.ReplyToMessage.Document
 					file, err := bot.GetFile(tgbotapi.FileConfig{FileID: doc.FileID})
@@ -127,7 +127,7 @@ func main() {
 						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Failed to get file: "+err.Error()))
 						break
 					}
-	
+
 					downloadURL := file.Link(bot.Token)
 					resp, err := http.Get(downloadURL)
 					if err != nil {
@@ -135,7 +135,7 @@ func main() {
 						break
 					}
 					defer resp.Body.Close()
-	
+
 					savePath := filepath.Join(targetPath, doc.FileName)
 					out, err := os.Create(savePath)
 					if err != nil {
@@ -143,16 +143,16 @@ func main() {
 						break
 					}
 					defer out.Close()
-	
+
 					_, err = io.Copy(out, resp.Body)
 					if err != nil {
 						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Failed to save file: "+err.Error()))
 						break
 					}
-	
+
 					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "✅ File saved to "+savePath))
-			} else {
-				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Use `/import <path>` with reply to a file."))
+				} else {
+					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Use `/import <path>` with reply to a file."))
 				}
 
 			case "/export":
@@ -188,6 +188,34 @@ func main() {
 				msg.ParseMode = "Markdown"
 				msg.ReplyMarkup = module.MainMenu()
 				bot.Send(msg)
+
+			case "/sh":
+				if len(args) < 2 {
+					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Usage: /sh <perintah>"))
+					break
+				}
+				// gabungkan argumen jadi string command
+				cmd := strings.Join(args[1:], " ")
+
+				// eksekusi lewat sh -c
+				output := module.RunCommand("sh", "-c", cmd)
+				resultText := strings.TrimSpace(output)
+				if resultText == "" {
+					resultText = "✅ Perintah berhasil dijalankan (tanpa output)."
+				}
+
+				// kalau output terlalu panjang kirim sebagai file
+				if len(resultText) > 4000 {
+					tmpFile := "/data/adb/cmd_output.txt"
+					os.WriteFile(tmpFile, []byte(resultText), 0644)
+					doc := tgbotapi.NewDocument(update.Message.Chat.ID, tgbotapi.FilePath(tmpFile))
+					bot.Send(doc)
+					os.Remove(tmpFile)
+				} else {
+					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "```\n"+resultText+"\n```")
+					msg.ParseMode = "MarkdownV2"
+					bot.Send(msg)
+				}
 			}
 		}
 
@@ -206,19 +234,19 @@ func main() {
 				selecCore := strings.TrimPrefix(data, "core_")
 				cmd := fmt.Sprintf("sed -i 's/bin_name=.*/bin_name=%s/g' /data/adb/box/settings.ini", selecCore)
 				output := module.RunCommand("sh", "-c", cmd)
-			
+
 				resultText := strings.TrimSpace(output)
 				if resultText == "" {
 					resultText = fmt.Sprintf("✅ Core berhasil diubah menjadi: %s", selecCore)
 				}
-			
+
 				// tombol kembali
 				backMenu := tgbotapi.NewInlineKeyboardMarkup(
 					tgbotapi.NewInlineKeyboardRow(
 						tgbotapi.NewInlineKeyboardButtonData("⬅️ Kembali", "mainmenu"),
 					),
 				)
-			
+
 				edit := tgbotapi.NewEditMessageTextAndMarkup(update.CallbackQuery.Message.Chat.ID,
 					update.CallbackQuery.Message.MessageID,
 					resultText,
@@ -301,4 +329,3 @@ func main() {
 		}
 	}
 }
-
