@@ -80,12 +80,14 @@ func handleMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	if !authorized(bot, msg.From.ID, msg.Chat.ID) { return }
 	args := strings.Fields(msg.Text)
 	if len(args) == 0 { return }
+
+	// Basic commands already include /help, /menu, /status, and /health.
+	// Do not call them again in the switch below or they execute twice.
 	module.HandleBasicCommands(bot, msg.Chat.ID, msg.Text)
+
 	switch strings.Split(args[0], "@")[0] {
 	case "/myip": module.HandleMyIP(bot, msg.Chat.ID)
 	case "/info": module.HandleInfo(bot, msg.Chat.ID)
-	case "/status": module.HandleStatus(bot, msg.Chat.ID)
-	case "/health": module.HandleHealth(bot, msg.Chat.ID)
 	case "/ipinfo": module.HandleIPInfo(bot, update)
 	case "/hostip": module.HandleHostIP(bot, update)
 	case "/yacd": module.HandleYacd(bot, msg.Chat.ID)
