@@ -1,144 +1,64 @@
 package module
 
 import (
-    "fmt"
-    "os"
-    "os/exec"
-    "strconv"
-    "strings"
+	"strings"
 
-    tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func runShell(cmd string, args ...string) string {
-    out, err := exec.Command(cmd, args...).CombinedOutput()
-    if err != nil {
-        if len(out) > 0 {
-            return strings.TrimSpace(string(out))
-        }
-        return fmt.Sprintf("Error: %v", err)
-    }
-    return strings.TrimSpace(string(out))
+func HandleHelp(chatID int64, bot *tgbotapi.BotAPI) {
+	helpText := `📖 *Daftar Command:*
+
+/help       - Menampilkan bantuan
+  └ Menampilkan daftar perintah lengkap
+/menu       - Menampilkan menu utama
+  └ Akses cepat ke menu sbfr
+/status     - Menampilkan ringkasan status sistem Android
+  └ Battery, uptime, dan memori
+/health     - Cek status proses & koneksi Mihomo
+  └ Mendeteksi apakah core dan API hidup
+/log        - Menampilkan 50 baris log terakhir
+  └ Gunakan /log 100 untuk ambil baris lebih banyak
+/import     - <path> (default: /data/adb/box/)
+  └ Import file ke box (reply ke file)
+/export     - <path/file> (default: /data/adb/box/)
+  └ Export file dari box
+/sbfr       - Menu kontrountuk /system/bin/sbfr
+  └ Jalankan, stop, restart, dan check status
+/yacd       - Menu kontrodashboard YACD
+  └ Pilih grup proxy, check delay, reload config
+/core       - Pilih core untuk settings.ini
+  └ Opsi: clash, sing-box, xray, v2fly, hysteria
+/speedtest  - Pilih aksi SpeedTest
+  └ Run SpeedTest
+`
+
+	msg := tgbotapi.NewMessage(chatID, helpText)
+	msg.ParseMode = "Markdown"
+	bot.Send(msg)
 }
 
-func isProcessRunning(name string) bool {
-    out := runShell("sh", "-c", "ps -A 2>/dev/null | grep -E \""+name+"\" | grep -v grep | head -n 1")
-    return strings.TrimSpace(out) != ""
+func HandleMenu(chatID int64, bot *tgbotapi.BotAPI) {
+	msg := tgbotapi.NewMessage(chatID, "📌 *Menu Utama:*")
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = MainMenu()
+	bot.Send(msg)
 }
 
-func readSelectedCore() string {
-    data, err := os.ReadFile("/data/adb/box/settings.ini")
-    if err != nil {
-        return "not configured"
-    }
-    text := string(data)
-    for _, line := range strings.Split(text, "\n") {
-        line = strings.TrimSpace(line)
-        if strings.HasPrefix(line, "bin_name=") {
-            return strings.TrimPrefix(line, "bin_name=")
-        }
-    }
-    return "unknown"
-}
+func HandleBasicCommands(bot *tgbotapi.BotAPI, chatID int64, text string) {
+	args := strings.Fields(text)
+	if len(args) == 0 {
+		return
+	}
 
-func HandleHealth(bot *tgbotapi.BotAPI, chatID int64) {
-    var out strings.Builder
-    out.WriteString("🩺 *Bot Health Check*\n\n")
-
-    // process daemon check
-    checks := []struct {
-        name  string
-        value string
-    }{
-        {"mihomo", ""},
-        {"clash", ""},
-        {"sing-box", ""},
-        {"xray", ""},
-        {"hysteria", ""},
-    }
-
-    for i := range checks {
-        checks[i].value = map[bool]string{true: "✅ Running", false: "⚠️ Not running"}[isProcessRunning(checks[i].name)]
-        out.WriteString(fmt.Sprintf("• %s: %s\n", strings.Title(checks[i].name), checks[i].value))
-    }
-
-    // mihomo API
-    var version map[string]string
-    if err := getJSON(mihomoAPI+"/version", &version); err != nil {
-        out.WriteString("\n🌐 Mihomo API: ❌ unreachable\n")
-    } else {
-        apiVersion := version["version"]
-        if apiVersion == "" {
-            apiVersion = "ok"
-        }
-        out.WriteString(fmt.Sprintf("\n🌐 Mihomo API: ✅ reachable (%s)\n", apiVersion))
-    }
-
-    // selected core
-    out.WriteString(fmt.Sprintf("\n🧩 Selected core: %s\n", readSelectedCore()))
-
-    msg := tgbotapi.NewMessage(chatID, out.String())
-    msg.ParseMode = "Markdown"
-    msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-        tgbotapi.NewInlineKeyboardRow(
-            tgbotapi.NewInlineKeyboardButtonData("🔄 Check Again", "health_check"),
-            tgbotapi.NewInlineKeyboardButtonData("⬅️ Kembali", "mainmenu"),
-        ),
-    )
-    bot.Send(msg)
-}
-
-func HandleHealthCallback(bot *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
-    chatID := cq.Message.Chat.ID
-    msgID := cq.Message.MessageID
-
-    // regenerate same content
-    msgText := ""
-    var sb strings.Builder
-    sb.WriteString("🩺 *Bot Health Check*\n\n")
-    for _, name := range []string{"mihomo", "clash", "sing-box", "xray", "hysteria"} {
-        status := map[bool]string{true: "✅ Running", false: "⚠️ Not running"}[isProcessRunning(name)]
-        sb.WriteString(fmt.Sprintf("• %s: %s\n", strings.Title(name), status))
-    }
-
-    var version map[string]string
-    if err := getJSON(mihomoAPI+"/version", &version); err == nil {
-        sb.WriteString(fmt.Sprintf("\n🌐 Mihomo API: ✅ reachable (%s)\n", version["version"]))
-    } else {
-        sb.WriteString("\n🌐 Mihomo API: ❌ unreachable\n")
-    }
-    sb.WriteString(fmt.Sprintf("\n🧩 Selected core: %s\n", readSelectedCore()))
-    msgText = sb.String()
-
-    edit := tgbotapi.NewEditMessageTextAndMarkup(chatID, msgID, msgText, tgbotapi.NewInlineKeyboardMarkup(
-        tgbotapi.NewInlineKeyboardRow(
-            tgbotapi.NewInlineKeyboardButtonData("🔄 Check Again", "health_check"),
-            tgbotapi.NewInlineKeyboardButtonData("⬅️ Kembali", "mainmenu"),
-        ),
-    ))
-    edit.ParseMode = "Markdown"
-    bot.Send(edit)
-}
-
-func formatTail(lines []string, limit int) string {
-    if len(lines) <= limit {
-        return strings.Join(lines, "\n")
-    }
-    return strings.Join(lines[len(lines)-limit:], "\n")
-}
-
-func TailLog(path string, limit int) string {
-    data, err := os.ReadFile(path)
-    if err != nil {
-        return "❌ Log tidak ditemukan: " + err.Error()
-    }
-    text := strings.TrimRight(string(data), "\n")
-    if text == "" {
-        return "Log kosong."
-    }
-    lines := strings.Split(text, "\n")
-    if limit <= 0 || limit > len(lines) {
-        limit = len(lines)
-    }
-    return formatTail(lines, limit)
+	switch args[0] {
+	case "/help":
+		HandleHelp(chatID, bot)
+	case "/menu":
+		HandleMenu(chatID, bot)
+	case "/status":
+		HandleStatus(bot, chatID)
+	case "/health":
+		HandleHealth(bot, chatID)
+	}
 }

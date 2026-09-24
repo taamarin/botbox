@@ -1,90 +1,340 @@
-package module
+package main
 
 import (
-    "strconv"
-    "strings"
+	"flag"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 
-    tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"main/module"
+	"gopkg.in/ini.v1"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func HandleLog(bot *tgbotapi.BotAPI, chatID int64, maxLines int) {
-    path := "/data/adb/box/run/runs.log"
-    text := TailLog(path, maxLines)
-    if len(text) > 4000 {
-        msg := tgbotapi.NewMessage(chatID, "📄 Output log terlalu panjang, kirim ringkasan terakhir:\n\n```\n"+text[:4000]+"\n```")
-        msg.ParseMode = "Markdown"
-        bot.Send(msg)
-        return
-    }
+var (
+	botToken  string
+	ownerID   int64
+	mihomoAPI string
+	apiSecret string
+)
 
-    msg := tgbotapi.NewMessage(chatID, "```\n"+text+"\n```")
-    msg.ParseMode = "Markdown"
-    bot.Send(msg)
+var configPath string
+
+func loadConfig(path string) error {
+	cfg, err := ini.Load(path)
+	if err != nil {
+		return err
+	}
+
+	botToken = cfg.Section("bot").Key("token").String()
+	ownerStr := cfg.Section("bot").Key("owner").String()
+	ownerID, _ = strconv.ParseInt(ownerStr, 10, 64)
+
+	mihomoAPI = cfg.Section("mihomo").Key("api").String()
+	if mihomoAPI == "" {
+		mihomoAPI = cfg.Section("bot").Key("mihomo_api").String()
+	}
+
+	apiSecret = cfg.Section("mihomo").Key("secret").String()
+	if apiSecret == "" {
+		apiSecret = cfg.Section("bot").Key("api_secret").String()
+	}
+
+	if botToken == "" || ownerStr == "" || mihomoAPI == "" {
+		return fmt.Errorf("config tidak lengkap: token, owner, dan mihomo.api wajib diisi")
+	}
+
+	return nil
 }
 
-func HandleLogCommand(bot *tgbotapi.BotAPI, chatID int64, rawArgs []string) {
-    limit := 50
-    if len(rawArgs) > 0 {
-        if n, err := strconv.Atoi(rawArgs[0]); err == nil && n > 0 {
-            limit = n
-        }
-    }
-    HandleLog(bot, chatID, limit)
-}
+func main() {
+	flag.StringVar(&configPath, "c", "", "Path ke bot.ini")
+	flag.Parse()
 
-func HandleHelp(chatID int64, bot *tgbotapi.BotAPI) {
-    helpText := `📖 *Daftar Command:*
+	if configPath == "" {
+		exPath, err := os.Executable()
+		if err != nil {
+			log.Fatalf("Gagal dapat path executable: %v", err)
+		}
+		exDir := filepath.Dir(exPath)
+		configPath = filepath.Join(exDir, "bot.ini")
+	}
 
-/help       - Menampilkan bantuan
-  └ Menampilkan daftar perintah lengkap
-/menu       - Menampilkan menu utama
-  └ Akses cepat ke menu sbfr
-/status     - Menampilkan ringkasan status sistem Android
-  └ Battery, uptime, dan memori
-/health     - Cek status proses & koneksi Mihomo
-  └ Mendeteksi apakah core dan API hidup
-/log        - Menampilkan 50 baris log terakhir
-  └ Gunakan /log 100 untuk ambil baris lebih banyak
-/import     - <path> (default: /data/adb/box/)
-  └ Import file ke box (reply ke file)
-/export     - <path/file> (default: /data/adb/box/)
-  └ Export file dari box
-/sbfr       - Menu kontrountuk /system/bin/sbfr
-  └ Jalankan, stop, restart, dan check status
-/yacd       - Menu kontrodashboard YACD
-  └ Pilih grup proxy, check delay, reload config
-/core       - Pilih core untuk settings.ini
-  └ Opsi: clash, sing-box, xray, v2fly, hysteria
-/speedtest  - Pilih aksi SpeedTest
-  └ Run SpeedTest
-`
+	if err := loadConfig(configPath); err != nil {
+		log.Fatalf("Gagal baca bot.ini di %s: %v", configPath, err)
+	}
 
-    msg := tgbotapi.NewMessage(chatID, helpText)
-    msg.ParseMode = "Markdown"
-    bot.Send(msg)
-}
+	module.Init(mihomoAPI, apiSecret)
 
-func HandleMenu(chatID int64, bot *tgbotapi.BotAPI) {
-    msg := tgbotapi.NewMessage(chatID, "📌 *Menu Utama:*")
-    msg.ParseMode = "Markdown"
-    msg.ReplyMarkup = MainMenu()
-    bot.Send(msg)
-}
+	bot, err := tgbotapi.NewBotAPI(botToken)
+	if err != nil {
+		log.Panic(err)
+	}
 
-func HandleBasicCommands(bot *tgbotapi.BotAPI, chatID int64, text string) {
-    args := strings.Fields(text)
-    if len(args) == 0 {
-        return
-    }
+	log.Printf("Bot jalan sebagai %s", bot.Self.UserName)
 
-    switch args[0] {
-    case "/help":
-        HandleHelp(chatID, bot)
-    case "/menu":
-        HandleMenu(chatID, bot)
-    case "/status":
-        HandleStatus(bot, chatID)
-    case "/health":
-        HandleHealth(bot, chatID)
-    }
+	startupMsg := tgbotapi.NewMessage(ownerID, fmt.Sprintf("✅ Bot *%s* berhasil dijalankan! /help", bot.Self.UserName))
+	startupMsg.ParseMode = "Markdown"
+	bot.Send(startupMsg)
+
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 30
+
+	updates, _ := bot.GetUpdates(u)
+	if len(updates) > 0 {
+		lastUpdate := updates[len(updates)-1]
+		u.Offset = lastUpdate.UpdateID + 1
+	}
+
+	updatesChan := bot.GetUpdatesChan(u)
+
+	for update := range updatesChan {
+		if update.Message != nil && update.Message.Text != "" {
+			if update.Message.From.ID != ownerID {
+				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Kamu tidak punya akses."))
+				continue
+			}
+
+			args := strings.Fields(update.Message.Text)
+			module.HandleBasicCommands(bot, update.Message.Chat.ID, update.Message.Text)
+
+			switch args[0] {
+			case "/myip":
+				module.HandleMyIP(bot, update.Message.Chat.ID)
+			case "/info":
+				module.HandleInfo(bot, update.Message.Chat.ID)
+			case "/status":
+				module.HandleStatus(bot, update.Message.Chat.ID)
+			case "/health":
+				module.HandleHealth(bot, update.Message.Chat.ID)
+			case "/ipinfo":
+				module.HandleIPInfo(bot, update)
+			case "/hostip":
+				module.HandleHostIP(bot, update)
+			case "/yacd":
+				module.HandleYacd(bot, update.Message.Chat.ID)
+			case "/speedtest":
+				module.HandleSpeedTest(update.Message.Chat.ID, bot)
+			case "/core":
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Pilih core yang ingin digunakan:")
+				msg.ReplyMarkup = module.CoreMenu()
+				bot.Send(msg)
+			case "/import":
+				defaultPath := "/data/adb/box"
+				targetPath := defaultPath
+				if len(args) > 1 {
+					targetPath = args[1]
+				}
+
+				if update.Message.ReplyToMessage != nil && update.Message.ReplyToMessage.Document != nil {
+					doc := update.Message.ReplyToMessage.Document
+					file, err := bot.GetFile(tgbotapi.FileConfig{FileID: doc.FileID})
+					if err != nil {
+						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Failed to get file: "+err.Error()))
+						break
+					}
+					downloadURL := file.Link(bot.Token)
+					resp, err := http.Get(downloadURL)
+					if err != nil {
+						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Failed to download file: "+err.Error()))
+						break
+					}
+					defer resp.Body.Close()
+
+					savePath := filepath.Join(targetPath, doc.FileName)
+					out, err := os.Create(savePath)
+					if err != nil {
+						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Failed to create file: "+err.Error()))
+						break
+					}
+					defer out.Close()
+
+					_, err = io.Copy(out, resp.Body)
+					if err != nil {
+						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Failed to save file: "+err.Error()))
+						break
+					}
+
+					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "✅ File saved to "+savePath))
+				} else {
+					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Use `/import <path>` with reply to a file."))
+				}
+
+			case "/export":
+				if len(args) < 2 {
+					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Usage: /export <namafile>"))
+					break
+				}
+				filePath := filepath.Join("/data/adb/box", args[1])
+				if _, err := os.Stat(filePath); os.IsNotExist(err) {
+					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ File tidak ditemukan."))
+					break
+				}
+				doc := tgbotapi.NewDocument(update.Message.Chat.ID, tgbotapi.FilePath(filePath))
+				bot.Send(doc)
+
+			case "/log":
+				filePath := "/data/adb/box/run/runs.log"
+				data, err := os.ReadFile(filePath)
+				if err != nil {
+					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Gagal baca log: "+err.Error()))
+					break
+				}
+				if len(data) > 4000 {
+					doc := tgbotapi.NewDocument(update.Message.Chat.ID, tgbotapi.FilePath(filePath))
+					bot.Send(doc)
+				} else {
+					msg := tgbotapi.NewMessage(update.Message.Chat.ID, string(data))
+					bot.Send(msg)
+				}
+
+			case "/sbfr":
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Pilih aksi untuk `/data/adb/modules/box_for_root/system/bin/sbfr`:")
+				msg.ParseMode = "Markdown"
+				msg.ReplyMarkup = module.MainMenu()
+				bot.Send(msg)
+
+			case "/sh":
+				if len(args) < 2 {
+					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Usage: /sh <perintah>"))
+					break
+				}
+				cmd := strings.Join(args[1:], " ")
+				output := module.RunCommand("sh", "-c", cmd)
+				resultText := strings.TrimSpace(output)
+				if resultText == "" {
+					resultText = "✅ Perintah berhasil dijalankan (tanpa output)."
+				}
+
+				if len(resultText) > 4000 {
+					tmpFile := "/data/adb/cmd_output.txt"
+					os.WriteFile(tmpFile, []byte(resultText), 0644)
+					doc := tgbotapi.NewDocument(update.Message.Chat.ID, tgbotapi.FilePath(tmpFile))
+					bot.Send(doc)
+					os.Remove(tmpFile)
+				} else {
+					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "```\n"+resultText+"\n```")
+					msg.ParseMode = "MarkdownV2"
+					bot.Send(msg)
+				}
+			}
+		}
+
+		if update.CallbackQuery != nil {
+			if update.CallbackQuery.From.ID != ownerID {
+				bot.Request(tgbotapi.NewCallback(update.CallbackQuery.ID, "❌ Tidak ada akses."))
+				continue
+			}
+
+			data := update.CallbackQuery.Data
+			chatID := update.CallbackQuery.Message.Chat.ID
+			messageID := update.CallbackQuery.Message.MessageID
+
+			if data == "health_check" {
+				module.HandleHealthCallback(bot, update.CallbackQuery)
+				continue
+			}
+
+			if strings.HasPrefix(data, "core_") {
+				selecCore := strings.TrimPrefix(data, "core_")
+				cmd := fmt.Sprintf("sed -i 's/bin_name=.*/bin_name=%s/g' /data/adb/box/settings.ini", selecCore)
+				output := module.RunCommand("sh", "-c", cmd)
+
+				resultText := strings.TrimSpace(output)
+				if resultText == "" {
+					resultText = fmt.Sprintf("✅ Core berhasil diubah menjadi: %s", selecCore)
+				}
+
+				backMenu := tgbotapi.NewInlineKeyboardMarkup(
+					tgbotapi.NewInlineKeyboardRow(
+						tgbotapi.NewInlineKeyboardButtonData("⬅️ Kembali", "mainmenu"),
+					),
+				)
+
+				edit := tgbotapi.NewEditMessageTextAndMarkup(update.CallbackQuery.Message.Chat.ID,
+					update.CallbackQuery.Message.MessageID,
+					resultText,
+					backMenu,
+				)
+				edit.ParseMode = "Markdown"
+				bot.Send(edit)
+				continue
+			}
+
+			if data == "sys_status" {
+				module.HandleStatusCallback(bot, update.CallbackQuery)
+				continue
+			}
+
+			if strings.HasPrefix(data, "select_") ||
+				strings.HasPrefix(data, "choose_") ||
+				strings.HasPrefix(data, "check_delay_") ||
+				data == "status" ||
+				data == "reload" ||
+				data == "restart" ||
+				data == "upgrade" ||
+				data == "version" ||
+				data == "traffic" ||
+				data == "back" {
+				module.HandleYacdCallback(bot, update.CallbackQuery)
+				continue
+			}
+
+			switch data {
+			case "submenu_service":
+				edit := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, "⚡ *Service Commands*", module.ServiceMenu())
+				edit.ParseMode = "Markdown"
+				bot.Send(edit)
+
+			case "submenu_iptables":
+				edit := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, "🛡 *Iptables Commands*", module.IptablesMenu())
+				edit.ParseMode = "Markdown"
+				bot.Send(edit)
+
+			case "submenu_tools":
+				edit := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, "🛠 *Tools Commands*", module.ToolsMenu())
+				edit.ParseMode = "Markdown"
+				bot.Send(edit)
+
+			case "mainmenu":
+				edit := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, "Pilih aksi untuk `/data/adb/modules/box_for_root/system/bin/sbfr`:", module.MainMenu())
+				edit.ParseMode = "Markdown"
+				bot.Send(edit)
+
+			default:
+				loading := tgbotapi.NewEditMessageText(chatID, messageID, "⏳ Loading...")
+				bot.Send(loading)
+
+				var output string
+				parts := strings.Fields(data)
+				if len(parts) == 1 {
+					output = module.RunCommand("/data/adb/modules/box_for_root/system/bin/sbfr", parts[0])
+				} else if len(parts) == 2 {
+					output = module.RunCommand("/data/adb/modules/box_for_root/system/bin/sbfr", parts[0], parts[1])
+				}
+
+				backMenu := tgbotapi.NewInlineKeyboardMarkup(
+					tgbotapi.NewInlineKeyboardRow(
+						tgbotapi.NewInlineKeyboardButtonData("⬅️ Kembali ke Menu", "mainmenu"),
+					),
+				)
+
+				resultText := strings.TrimSpace(output)
+				if len(resultText) > 4000 {
+					resultText = "❗ Output terlalu panjang untuk ditampilkan."
+				} else {
+					resultText = "```\n" + resultText + "\n```"
+				}
+
+				edit := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, resultText, backMenu)
+				edit.ParseMode = "MarkdownV2"
+				bot.Send(edit)
+			}
+		}
+	}
 }
