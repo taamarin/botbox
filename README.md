@@ -1,6 +1,6 @@
 # Android Telegram Bot
 
-Bot Telegram untuk kontrol `/system/bin/sbfr`, dashboard YACD, dan manajemen core (Clash, Xray, Sing-box, V2Fly, Hysteria) di Android.
+Bot Telegram untuk kontrol `/system/bin/sbfr`, dashboard YACD, serta manajemen core (Clash, Xray, Sing-box, V2Fly, Hysteria) di Android.
 
 ---
 
@@ -8,13 +8,15 @@ Bot Telegram untuk kontrol `/system/bin/sbfr`, dashboard YACD, dan manajemen cor
 
 - `/help`       - Menampilkan bantuan
 - `/menu`       - Menampilkan menu utama
+- `/status`     - Ringkasan status sistem Android (battery, uptime, memori)
+- `/health`     - Cek status proses core/Mihomo dan koneksi API
+- `/log`        - Menampilkan log terakhir dari runs.log
 - `/import`     - <path> (default: /data/adb/box/)
 - `/export`     - <path/file> (default: /data/adb/box/)
-- `/log`        - Membaca isi runs.log
-- `/sbfr`       - Menu kontrountuk /system/bin/sbfr
-- `/yacd`       - Menu kontrodashboard YACD
+- `/sbfr`       - Menu untuk `/system/bin/sbfr`
+- `/yacd`       - Menu dashboard YACD
 - `/core`       - Pilih core untuk settings.ini
-- `/speedtest`  - Pilih aksi SpeedTest
+- `/speedtest`  - Jalankan speed test
 
 ---
 
@@ -33,14 +35,25 @@ cd <REPO_FOLDER>
 go mod tidy
 ```
 
-
-3. Buat konfigurasi bot di bot.ini:
+3. Buat konfigurasi bot di `bot.ini`:
 
 ```ini
 [bot]
 token = <YOUR_BOT_TOKEN>
 owner = <YOUR_TELEGRAM_ID>
-mihomo_api = http://192.168.1.1:9090
+
+[mihomo]
+api = http://127.0.0.1:9090
+secret = 123456
+```
+
+Catatan: untuk kompatibilitas, format lama berikut juga masih diterima:
+
+```ini
+[bot]
+token = <YOUR_BOT_TOKEN>
+owner = <YOUR_TELEGRAM_ID>
+mihomo_api = http://127.0.0.1:9090
 api_secret = 123456
 ```
 
@@ -53,20 +66,49 @@ go build -o bot .
 5. Jalankan bot:
 
 ```bash
-su -c sh bot -c docs/bot.ini
+su -c 'sh bot -c /path/to/bot.ini'
 ```
-> -c opsional, default bot mencari bot.ini di folder binary.
 
-## Struktur Folder 
+Atau bila file bot.ini berada di folder binary yang sama:
+
+```bash
+su -c sh bot -c bot.ini
+```
+
+> `-c` bersifat opsional. Kalau tidak diberikan, bot akan mencari `bot.ini` di folder executable.
+
+---
+
+## 🔧 Fitur Tambahan
+
+- `health watcher` otomatis: bot akan mengirim notifikasi ke owner jika proses core atau API tidak sehat.
+- `status` dashboard: menampilkan ringkasan sistem Android untuk debugging cepat.
+- `log` tailing: menampilkan bagian terakhir log untuk diagnosis singkat.
+
+---
+
+## Struktur Folder
+
 ```bash
 bot/
 ├── README.md
 ├── main.go
-├── commands.go
-├── yacd.go
 ├── go.mod
 ├── go.sum
+├── LICENSE
 ├── docs/
 │   ├── bot.ini
 │   └── bot.sh
+├── module/
+│   ├── commands.go
+│   ├── status.go
+│   ├── health.go
+│   ├── yacd.go
+│   ├── service.go
+│   ├── speedtest.go
+│   ├── myip.go
+│   ├── ipinfo.go
+│   ├── hostip.go
+│   └── info.go
+└── .github/
 ```
