@@ -14,6 +14,8 @@ func HandleHelp(chatID int64, bot *tgbotapi.BotAPI) {
   └ Menampilkan daftar perintah lengkap
 /menu       - Menampilkan menu utama
   └ Akses cepat ke menu sbfr
+/status     - Menampilkan ringkasan status sistem Android
+  └ Battery, uptime, dan memori
 /import     - <path> (default: /data/adb/box/)
   └ Import file ke box (reply ke file)
 /export     - <path/file> (default: /data/adb/box/)
@@ -55,5 +57,7 @@ func HandleBasicCommands(bot *tgbotapi.BotAPI, chatID int64, text string) {
 		HandleHelp(chatID, bot)
 	case "/menu":
 		HandleMenu(chatID, bot)
+	case "/status":
+		HandleStatus(bot, chatID)
 	}
 }

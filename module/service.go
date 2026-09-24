@@ -30,6 +30,7 @@ func MainMenu() tgbotapi.InlineKeyboardMarkup {
 			tgbotapi.NewInlineKeyboardButtonData("🛠 Tools", "submenu_tools"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📊 Status", "sys_status"),
 			tgbotapi.NewInlineKeyboardButtonData("⬆️ Upgrade Core", "u"),
 			tgbotapi.NewInlineKeyboardButtonData("⬆️ Upgrade UI", "x"),
 		),
@@ -123,3 +124,5 @@ func CoreMenu() tgbotapi.InlineKeyboardMarkup {
 		),
 	)
 }
+
+// NOTE: Status function is implemented in status.go, while this file keeps only shell/menu helpers.
