@@ -25,6 +25,33 @@ var (
 
 var configPath string
 
+func loadConfig(path string) error {
+	cfg, err := ini.Load(path)
+	if err != nil {
+		return err
+	}
+
+	botToken = cfg.Section("bot").Key("token").String()
+	ownerStr := cfg.Section("bot").Key("owner").String()
+	ownerID, _ = strconv.ParseInt(ownerStr, 10, 64)
+
+	mihomoAPI = cfg.Section("mihomo").Key("api").String()
+	if mihomoAPI == "" {
+		mihomoAPI = cfg.Section("bot").Key("mihomo_api").String()
+	}
+
+	apiSecret = cfg.Section("mihomo").Key("secret").String()
+	if apiSecret == "" {
+		apiSecret = cfg.Section("bot").Key("api_secret").String()
+	}
+
+	if botToken == "" || ownerStr == "" || mihomoAPI == "" {
+		return fmt.Errorf("config tidak lengkap: token, owner, dan mihomo.api wajib diisi")
+	}
+
+	return nil
+}
+
 func main() {
 	// baca path dari argumen -c
 	flag.StringVar(&configPath, "c", "", "Path ke bot.ini")
@@ -40,17 +67,9 @@ func main() {
 		configPath = filepath.Join(exDir, "bot.ini")
 	}
 
-	cfg, err := ini.Load(configPath)
-	if err != nil {
+	if err := loadConfig(configPath); err != nil {
 		log.Fatalf("Gagal baca bot.ini di %s: %v", configPath, err)
 	}
-
-	botToken := cfg.Section("bot").Key("token").String()
-	ownerStr := cfg.Section("bot").Key("owner").String()
-	ownerID, _ = strconv.ParseInt(ownerStr, 10, 64)
-
-	mihomoAPI = cfg.Section("mihomo").Key("api").String()
-	apiSecret = cfg.Section("mihomo").Key("secret").String()
 
 	// inisialisasi modul yacd
 	module.Init(mihomoAPI, apiSecret)
@@ -97,6 +116,8 @@ func main() {
 				module.HandleMyIP(bot, update.Message.Chat.ID)
 			case "/info":
 				module.HandleInfo(bot, update.Message.Chat.ID)
+			case "/status":
+				module.HandleStatus(bot, update.Message.Chat.ID)
 			case "/ipinfo":
 				module.HandleIPInfo(bot, update)
 			case "/hostip":
@@ -254,6 +275,11 @@ func main() {
 				)
 				edit.ParseMode = "Markdown"
 				bot.Send(edit)
+				continue
+			}
+
+			if data == "sys_status" {
+				module.HandleStatusCallback(bot, update.CallbackQuery)
 				continue
 			}
 
