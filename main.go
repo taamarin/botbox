@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	"main/module"
-	"gopkg.in/ini.v1"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"gopkg.in/ini.v1"
+	"main/module"
 )
 
 var (

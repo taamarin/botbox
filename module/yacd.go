@@ -303,12 +303,12 @@ func HandleYacdCallback(bot *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
 			bot.Send(tgbotapi.NewEditMessageText(chatID, msgID, "❌ Gagal ambil status: "+err.Error()))
 			return
 		}
-		
+
 		total := 0
 		if connections, ok := conns["connections"].([]interface{}); ok {
 			total = len(connections)
 		}
-		
+
 		// Get download/upload stats
 		download := 0.0
 		upload := 0.0
@@ -323,7 +323,7 @@ func HandleYacdCallback(bot *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
 			"• Koneksi aktif: %d\n"+
 			"• Download: %.2f MB\n"+
 			"• Upload: %.2f MB", total, download, upload)
-		
+
 		edit := tgbotapi.NewEditMessageText(chatID, msgID, statusText)
 		edit.ParseMode = "Markdown"
 		bot.Send(edit)
