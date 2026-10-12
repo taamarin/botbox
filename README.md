@@ -75,6 +75,10 @@ Bot Telegram untuk mengelola `sbfr`, dashboard API Mihomo/YACD, dan core proxy d
 
 ```text
 .
+├── README.md
+├── LICENSE
+├── go.mod
+├── go.sum
 ├── main.go
 ├── module/
 │   ├── commands.go
