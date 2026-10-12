@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	"main/module"
-	"gopkg.in/ini.v1"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"gopkg.in/ini.v1"
+	"main/module"
 )
 
 var (
@@ -47,7 +47,13 @@ func main() {
 
 	botToken := cfg.Section("bot").Key("token").String()
 	ownerStr := cfg.Section("bot").Key("owner").String()
-	ownerID, _ = strconv.ParseInt(ownerStr, 10, 64)
+	ownerID, err = strconv.ParseInt(ownerStr, 10, 64)
+	if err != nil || ownerID == 0 {
+		log.Fatalf("ID owner tidak valid di %s", configPath)
+	}
+	if botToken == "" {
+		log.Fatalf("Token bot tidak ditemukan di %s", configPath)
+	}
 
 	mihomoAPI = cfg.Section("mihomo").Key("api").String()
 	apiSecret = cfg.Section("mihomo").Key("secret").String()
@@ -90,6 +96,9 @@ func main() {
 			}
 
 			args := strings.Fields(update.Message.Text)
+			if len(args) == 0 {
+				continue
+			}
 			module.HandleBasicCommands(bot, update.Message.Chat.ID, update.Message.Text)
 
 			switch args[0] {
@@ -134,19 +143,35 @@ func main() {
 						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Failed to download file: "+err.Error()))
 						break
 					}
-					defer resp.Body.Close()
+					if resp.StatusCode != http.StatusOK {
+						resp.Body.Close()
+						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Failed to download file: "+resp.Status))
+						break
+					}
 
-					savePath := filepath.Join(targetPath, doc.FileName)
+					fileName := filepath.Base(filepath.Clean(doc.FileName))
+					if fileName == "." || fileName == string(filepath.Separator) {
+						resp.Body.Close()
+						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Invalid file name."))
+						break
+					}
+					savePath := filepath.Join(targetPath, fileName)
 					out, err := os.Create(savePath)
 					if err != nil {
+						resp.Body.Close()
 						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Failed to create file: "+err.Error()))
 						break
 					}
-					defer out.Close()
 
 					_, err = io.Copy(out, resp.Body)
+					resp.Body.Close()
+					closeErr := out.Close()
 					if err != nil {
 						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Failed to save file: "+err.Error()))
+						break
+					}
+					if closeErr != nil {
+						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Failed to save file: "+closeErr.Error()))
 						break
 					}
 
@@ -160,7 +185,12 @@ func main() {
 					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Usage: /export <namafile>"))
 					break
 				}
-				filePath := filepath.Join("/data/adb/box", args[1])
+				fileName := filepath.Base(filepath.Clean(args[1]))
+				if fileName == "." || fileName == string(filepath.Separator) {
+					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Nama file tidak valid."))
+					break
+				}
+				filePath := filepath.Join("/data/adb/box", fileName)
 				if _, err := os.Stat(filePath); os.IsNotExist(err) {
 					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ File tidak ditemukan."))
 					break
@@ -232,8 +262,16 @@ func main() {
 
 			if strings.HasPrefix(data, "core_") {
 				selecCore := strings.TrimPrefix(data, "core_")
-				cmd := fmt.Sprintf("sed -i 's/bin_name=.*/bin_name=%s/g' /data/adb/box/settings.ini", selecCore)
-				output := module.RunCommand("sh", "-c", cmd)
+				validCores := map[string]bool{
+					"clash": true, "sing-box": true, "xray": true,
+					"v2fly": true, "hysteria": true,
+				}
+				if !validCores[selecCore] {
+					bot.Request(tgbotapi.NewCallback(update.CallbackQuery.ID, "❌ Core tidak valid."))
+					continue
+				}
+				expression := fmt.Sprintf("s/bin_name=.*/bin_name=%s/g", selecCore)
+				output := module.RunCommand("sed", "-i", expression, "/data/adb/box/settings.ini")
 
 				resultText := strings.TrimSpace(output)
 				if resultText == "" {
