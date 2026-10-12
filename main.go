@@ -262,8 +262,16 @@ func main() {
 
 			if strings.HasPrefix(data, "core_") {
 				selecCore := strings.TrimPrefix(data, "core_")
-				cmd := fmt.Sprintf("sed -i 's/bin_name=.*/bin_name=%s/g' /data/adb/box/settings.ini", selecCore)
-				output := module.RunCommand("sh", "-c", cmd)
+				validCores := map[string]bool{
+					"clash": true, "sing-box": true, "xray": true,
+					"v2fly": true, "hysteria": true,
+				}
+				if !validCores[selecCore] {
+					bot.Request(tgbotapi.NewCallback(update.CallbackQuery.ID, "❌ Core tidak valid."))
+					continue
+				}
+				expression := fmt.Sprintf("s/bin_name=.*/bin_name=%s/g", selecCore)
+				output := module.RunCommand("sed", "-i", expression, "/data/adb/box/settings.ini")
 
 				resultText := strings.TrimSpace(output)
 				if resultText == "" {

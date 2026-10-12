@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -17,13 +19,11 @@ var (
 	apiSecret string
 )
 
-func Init(api, secret string) {
-	mihomoAPI = api
-	apiSecret = secret
-}
+var mihomoClient = &http.Client{Timeout: 10 * time.Second}
 
-var HEADERS = map[string]string{
-	"Authorization": "Bearer " + apiSecret,
+func Init(api, secret string) {
+	mihomoAPI = strings.TrimRight(api, "/")
+	apiSecret = secret
 }
 
 type ProxyItem struct {
@@ -36,28 +36,44 @@ type ProxiesResponse struct {
 	Proxies map[string]ProxyItem `json:"proxies"`
 }
 
-// helper GET
-func getJSON(url string, target interface{}) error {
-	req, _ := http.NewRequest("GET", url, nil)
-	for k, v := range HEADERS {
-		req.Header.Set(k, v)
+func newAPIRequest(method, requestURL string, payload []byte) (*http.Request, error) {
+	req, err := http.NewRequest(method, requestURL, bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	if apiSecret != "" {
+		req.Header.Set("Authorization", "Bearer "+apiSecret)
+	}
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return req, nil
+}
+
+// helper GET
+func getJSON(requestURL string, target interface{}) error {
+	req, err := newAPIRequest(http.MethodGet, requestURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := mihomoClient.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	return json.NewDecoder(resp.Body).Decode(target)
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+		return fmt.Errorf("Mihomo API returned %s", resp.Status)
+	}
+	return json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(target)
 }
 
 // helper PUT/POST
-func sendRequest(method, url string, payload []byte) (*http.Response, error) {
-	req, _ := http.NewRequest(method, url, bytes.NewBuffer(payload))
-	for k, v := range HEADERS {
-		req.Header.Set(k, v)
+func sendRequest(method, requestURL string, payload []byte) (*http.Response, error) {
+	req, err := newAPIRequest(method, requestURL, payload)
+	if err != nil {
+		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	return http.DefaultClient.Do(req)
+	return mihomoClient.Do(req)
 }
 
 // keyboard utama
@@ -126,7 +142,7 @@ func HandleYacdCallback(bot *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
 	case strings.HasPrefix(data, "select_"):
 		group := strings.TrimPrefix(data, "select_")
 		var groupInfo ProxyItem
-		if err := getJSON(mihomoAPI+"/proxies/"+group, &groupInfo); err != nil {
+		if err := getJSON(mihomoAPI+"/proxies/"+url.PathEscape(group), &groupInfo); err != nil {
 			bot.Send(tgbotapi.NewEditMessageText(chatID, msgID, "❌ Gagal ambil data group: "+err.Error()))
 			return
 		}
@@ -166,7 +182,7 @@ func HandleYacdCallback(bot *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
 	case strings.HasPrefix(data, "check_delay_"):
 		group := strings.TrimPrefix(data, "check_delay_")
 		var groupInfo ProxyItem
-		if err := getJSON(mihomoAPI+"/proxies/"+group, &groupInfo); err != nil {
+		if err := getJSON(mihomoAPI+"/proxies/"+url.PathEscape(group), &groupInfo); err != nil {
 			bot.Send(tgbotapi.NewEditMessageText(chatID, msgID, "❌ Gagal ambil data group: "+err.Error()))
 			return
 		}
@@ -195,8 +211,24 @@ func HandleYacdCallback(bot *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
 
 	case strings.HasPrefix(data, "choose_"):
 		parts := strings.SplitN(data, "_", 3)
+		if len(parts) != 3 {
+			bot.Send(tgbotapi.NewEditMessageText(chatID, msgID, "❌ Callback tidak valid."))
+			return
+		}
 		group, proxy := parts[1], parts[2]
-		if _, err := sendRequest("PUT", mihomoAPI+"/proxies/"+group, []byte(fmt.Sprintf(`{"name":"%s"}`, proxy))); err != nil {
+		payload, err := json.Marshal(map[string]string{"name": proxy})
+		if err != nil {
+			bot.Send(tgbotapi.NewEditMessageText(chatID, msgID, "❌ Gagal set proxy."))
+			return
+		}
+		resp, err := sendRequest(http.MethodPut, mihomoAPI+"/proxies/"+url.PathEscape(group), payload)
+		if err == nil {
+			defer resp.Body.Close()
+		}
+		if err != nil || resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+			if err == nil {
+				err = fmt.Errorf("Mihomo API returned %s", resp.Status)
+			}
 			bot.Send(tgbotapi.NewEditMessageText(chatID, msgID, "❌ Gagal set proxy: "+err.Error()))
 			return
 		}
@@ -215,7 +247,7 @@ func HandleYacdCallback(bot *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
 		for name, item := range proxiesResp.Proxies {
 			if item.Type == "Selector" {
 				var delayResp map[string]interface{}
-				_ = getJSON(mihomoAPI+"/proxies/"+name+"/delay?url=http://www.gstatic.com/generate_204&timeout=3000", &delayResp)
+				_ = getJSON(mihomoAPI+"/proxies/"+url.PathEscape(name)+"/delay?url=http://www.gstatic.com/generate_204&timeout=3000", &delayResp)
 				delay := "timeout"
 				if d, ok := delayResp["delay"].(float64); ok {
 					delay = strconv.Itoa(int(d))
@@ -228,16 +260,33 @@ func HandleYacdCallback(bot *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
 		bot.Send(edit)
 
 	case data == "reload":
-		sendRequest("PUT", mihomoAPI+"/configs?force=true", []byte(`{"path":"","payload":""}`))
-		bot.Send(tgbotapi.NewEditMessageText(chatID, msgID, "Config berhasil di-reload."))
+		resp, err := sendRequest(http.MethodPut, mihomoAPI+"/configs?force=true", []byte(`{"path":"","payload":""}`))
+		if err == nil {
+			defer resp.Body.Close()
+		}
+		if err != nil || resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+			bot.Send(tgbotapi.NewEditMessageText(chatID, msgID, "❌ Gagal reload config."))
+		} else {
+			bot.Send(tgbotapi.NewEditMessageText(chatID, msgID, "Config berhasil di-reload."))
+		}
 
 	case data == "restart":
-		sendRequest("POST", mihomoAPI+"/restart", nil)
-		bot.Send(tgbotapi.NewEditMessageText(chatID, msgID, "Restart selesai."))
+		resp, err := sendRequest(http.MethodPost, mihomoAPI+"/restart", nil)
+		if err == nil {
+			defer resp.Body.Close()
+		}
+		if err != nil || resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+			bot.Send(tgbotapi.NewEditMessageText(chatID, msgID, "❌ Gagal restart."))
+		} else {
+			bot.Send(tgbotapi.NewEditMessageText(chatID, msgID, "Restart selesai."))
+		}
 
 	case data == "upgrade":
-		resp, _ := sendRequest("POST", mihomoAPI+"/upgrade", nil)
-		if resp != nil && resp.StatusCode == 200 {
+		resp, err := sendRequest(http.MethodPost, mihomoAPI+"/upgrade", nil)
+		if resp != nil {
+			defer resp.Body.Close()
+		}
+		if err == nil && resp.StatusCode == http.StatusOK {
 			bot.Send(tgbotapi.NewEditMessageText(chatID, msgID, "Berhasil diperbarui."))
 		} else {
 			bot.Send(tgbotapi.NewEditMessageText(chatID, msgID, "Tidak ada pembaruan."))
