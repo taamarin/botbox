@@ -1,72 +1,91 @@
 # Android Telegram Bot
 
-Bot Telegram untuk kontrol `/system/bin/sbfr`, dashboard YACD, dan manajemen core (Clash, Xray, Sing-box, V2Fly, Hysteria) di Android.
+Bot Telegram untuk mengelola `sbfr`, dashboard API Mihomo/YACD, dan core proxy di perangkat Android. Bot ini ditujukan untuk perangkat Android yang sudah di-root dan hanya menerima perintah dari Telegram ID pemilik yang dikonfigurasi.
 
----
+## Fitur dan perintah
 
-## 📦 Fitur
+| Perintah | Fungsi |
+| --- | --- |
+| `/help` | Menampilkan bantuan |
+| `/menu` | Membuka menu `sbfr` |
+| `/sbfr` | Membuka menu pengelolaan `sbfr` |
+| `/yacd` | Mengelola proxy melalui API Mihomo |
+| `/core` | Memilih core: Clash, Sing-box, Xray, V2Fly, atau Hysteria |
+| `/speedtest` | Menjalankan SpeedTest |
+| `/myip` | Menampilkan informasi IP publik |
+| `/info` | Menampilkan informasi baterai dan uptime Android |
+| `/ipinfo <domain>` | Melihat informasi IP/domain; bisa juga membalas pesan berisi domain |
+| `/hostip <domain>` | Mencari alamat IP domain; bisa juga membalas pesan berisi domain |
+| `/import [direktori]` | Membalas dokumen dengan perintah ini untuk menyimpannya; direktori default `/data/adb/box` |
+| `/export <nama-file>` | Mengirim file dari `/data/adb/box` |
+| `/log` | Membaca `/data/adb/box/run/runs.log` |
+| `/sh <perintah>` | Menjalankan perintah shell |
 
-- `/help`       - Menampilkan bantuan
-- `/menu`       - Menampilkan menu utama
-- `/import`     - <path> (default: /data/adb/box/)
-- `/export`     - <path/file> (default: /data/adb/box/)
-- `/log`        - Membaca isi runs.log
-- `/sbfr`       - Menu kontrountuk /system/bin/sbfr
-- `/yacd`       - Menu kontrodashboard YACD
-- `/core`       - Pilih core untuk settings.ini
-- `/speedtest`  - Pilih aksi SpeedTest
+**Perhatian:** `/sh` menjalankan perintah shell yang diberikan. Gunakan hanya di chat tepercaya dan berhati-hatilah dengan perintah yang dijalankan.
 
----
+## Persyaratan
 
-## ⚙️ Instalasi
+- Perangkat Android yang sudah di-root dengan `sbfr` dan berkas terkait tersedia di lokasi yang diharapkan bot.
+- Go 1.25 atau lebih baru untuk membangun aplikasi.
+- Token bot Telegram dan ID numerik Telegram pemilik.
+- API Mihomo yang dapat dijangkau dari perangkat (untuk fitur YACD).
 
-1. Clone repository:
+## Instalasi dan konfigurasi
 
-```bash
-git clone <REPO_URL>
-cd <REPO_FOLDER>
-```
+1. Clone repository dan masuk ke direktorinya:
 
-2. Install dependensi Go:
+   ```sh
+   git clone <REPO_URL>
+   cd <REPO_FOLDER>
+   ```
 
-```bash
-go mod tidy
-```
+2. Salin konfigurasi contoh, lalu isi token dan ID Telegram Anda:
 
+   ```sh
+   cp docs/bot.ini bot.ini
+   ```
 
-3. Buat konfigurasi bot di bot.ini:
+   ```ini
+   [bot]
+   token = <YOUR_BOT_TOKEN>
+   owner = <YOUR_TELEGRAM_ID>
 
-```ini
-[bot]
-token = <YOUR_BOT_TOKEN>
-owner = <YOUR_TELEGRAM_ID>
-mihomo_api = http://192.168.1.1:9090
-api_secret = 123456
-```
+   [mihomo]
+   api = http://127.0.0.1:9090
+   secret = <MIHOMO_API_SECRET>
+   ```
 
-4. Build bot:
+   `owner` harus berupa ID numerik Telegram. `secret` boleh dikosongkan jika API Mihomo tidak memerlukan autentikasi.
 
-```bash
-go build -o bot .
-```
+3. Bangun aplikasi dengan Go untuk arsitektur dan sistem operasi perangkat tujuan:
 
-5. Jalankan bot:
+   ```sh
+   go build -o bot .
+   ```
 
-```bash
-su -c sh bot -c docs/bot.ini
-```
-> -c opsional, default bot mencari bot.ini di folder binary.
+4. Jalankan bot dengan hak akses root dan berikan lokasi berkas konfigurasi:
 
-## Struktur Folder 
-```bash
-bot/
-├── README.md
+   ```sh
+   su -c './bot -c ./bot.ini'
+   ```
+
+   Jika opsi `-c` tidak diberikan, bot mencari `bot.ini` di direktori tempat binary berada.
+
+## Struktur repository
+
+```text
+.
 ├── main.go
-├── commands.go
-├── yacd.go
-├── go.mod
-├── go.sum
-├── docs/
-│   ├── bot.ini
-│   └── bot.sh
+├── module/
+│   ├── commands.go
+│   ├── hostip.go
+│   ├── info.go
+│   ├── ipinfo.go
+│   ├── myip.go
+│   ├── service.go
+│   ├── speedtest.go
+│   └── yacd.go
+└── docs/
+    ├── bot.ini
+    └── bot.sh
 ```
